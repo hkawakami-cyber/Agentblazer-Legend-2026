@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "jsforce": "^3.10.17",
+    "playwright": "^1.61.1"
+  }
+}
