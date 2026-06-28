@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Deploy Salesforce flows using jsforce (no SF CLI needed)
+ * Deploy Salesforce flows using jsforce
  * Usage: SF_TOKEN='your_session_id' node deploy-node.js
  */
 const jsforce = require('jsforce');
@@ -11,46 +11,47 @@ const instanceUrl = 'https://enmish42-dev-ed.develop.my.salesforce.com';
 
 if (!sessionId) {
   console.error('ERROR: Set SF_TOKEN environment variable');
-  console.error('Usage: SF_TOKEN=\'00Dxxxx!...\' node deploy-node.js');
+  console.error("Usage: SF_TOKEN='00Dxxxx!...' node deploy-node.js");
   process.exit(1);
 }
 
 const conn = new jsforce.Connection({
   sessionId: sessionId,
-  serverUrl: instanceUrl + '/services/Soap/u/62.0'
+  serverUrl: instanceUrl + '/services/Soap/u/62.0',
+  instanceUrl: instanceUrl
 });
 
-console.log('Deploying flows to', instanceUrl);
-console.log('Using flows-deploy.zip...');
+async function deploy() {
+  console.log('Deploying flows to', instanceUrl);
+  console.log('Using flows-deploy.zip...\n');
 
-const zipStream = fs.createReadStream('./flows-deploy.zip');
+  const zipData = fs.readFileSync('./flows-deploy.zip');
 
-conn.metadata.deploy(zipStream, {
-  rollbackOnError: true,
-  singlePackage: true
-}).complete(true, (err, result) => {
-  if (err) {
-    console.error('Deploy failed:', err.message || err);
-    process.exit(1);
-  }
+  try {
+    const result = await conn.metadata.deploy(zipData, {
+      rollbackOnError: true,
+      singlePackage: true
+    }).complete(true);
 
-  if (result.success) {
-    console.log('\n✅ Deploy successful!');
-    console.log('Status:', result.status);
-    console.log('Components deployed:', result.numberComponentsDeployed);
-    console.log('\nFlows deployed:');
-    console.log('  1. Get Contact\'s Upcoming Bookings');
-    console.log('  2. Cancel Contact\'s Booking');
-    console.log('\nYou can now check the Trailhead challenge!');
-  } else {
-    console.error('\n❌ Deploy failed');
-    console.error('Status:', result.status);
-    if (result.details && result.details.componentFailures) {
-      const failures = Array.isArray(result.details.componentFailures)
-        ? result.details.componentFailures
-        : [result.details.componentFailures];
-      failures.forEach(f => console.error('-', f.fullName, ':', f.problem));
+    console.log('Deploy result:', JSON.stringify(result, null, 2));
+
+    if (result.success || result.status === 'Succeeded') {
+      console.log('\n✅ Deploy successful!');
+    } else {
+      console.error('\n❌ Deploy failed. Status:', result.status);
+      const failures = result.details && result.details.componentFailures;
+      if (failures) {
+        const list = Array.isArray(failures) ? failures : [failures];
+        list.forEach(f => console.error(' -', f.fullName, ':', f.problem));
+      }
     }
-    process.exit(1);
+  } catch (err) {
+    console.error('\n❌ Error:', err.message || err);
+    if (err.message && err.message.includes('INVALID_SESSION_ID')) {
+      console.error('Session token expired. Get a fresh token from the Salesforce browser DevTools.');
+      console.error('Application tab > Cookies > enmish42-dev-ed... > sid value');
+    }
   }
-});
+}
+
+deploy();
